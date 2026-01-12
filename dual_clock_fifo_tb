@@ -1,0 +1,41 @@
+module dual_clock_fifo_tb;
+reg clk_w, clk_r, rst, wr_en, rd_en;
+reg[7:0] buf_in;
+wire buf_empty, buf_full;
+wire[7:0]buf_out;
+wire[7:0]fifo_counter;
+
+dual_clock_fifo uut(.clk_w(clk_w), .clk_r(clk_r), .rst(rst), .wr_en(wr_en), .rd_en(rd_en), .buf_in(buf_in), .buf_out(buf_out), .buf_empty(buf_empty), .buf_full(buf_full), .fifo_counter(fifo_counter));
+
+initial begin
+clk_w = 0;
+forever #5
+clk_w = ~clk_w;
+end
+
+initial begin
+clk_r = 0;
+forever #5
+clk_r = ~clk_r;
+end
+
+initial begin
+rst = 1;
+wr_en = 0;
+rd_en = 0;
+buf_in = 0;
+
+#20 rst = 0;
+wr_en = 1;
+#10 buf_in = 8'h11;
+#10 buf_in = 8'h22;
+#10 buf_in = 8'h33;
+#10 buf_in = 8'h44;
+#30 wr_en = 0;
+
+#40 rd_en = 1;
+#100 rd_en = 0;
+ 
+#20 $stop;
+end
+endmodule

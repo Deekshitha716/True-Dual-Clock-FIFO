@@ -1,0 +1,104 @@
+module dual_clock_fifo(clk_w, clk_r, rst, buf_in, buf_out, wr_en, rd_en, buf_empty, buf_full, fifo_counter);
+input clk_w, clk_r, rst, wr_en, rd_en;
+input [7:0] buf_in;
+output buf_empty, buf_full;
+output reg [7:0]buf_out;
+output reg [7:0]fifo_counter; 
+
+reg [6:0]wr_ptr_bin, rd_ptr_bin;
+reg [6:0]wr_ptr_gray, rd_ptr_gray;
+reg [6:0]wr_ptr_gray_sync1, wr_ptr_gray_sync2;
+reg [6:0]rd_ptr_gray_sync1, rd_ptr_gray_sync2;
+reg [7:0]buf_mem[63:0];
+
+//SYNCHRONIZING THE POINTERS IN EACH OTHER'S CLOCK DOMAINS
+
+always@(posedge clk_r or posedge rst)
+begin
+if(rst)
+begin
+wr_ptr_gray_sync1 <= 0;
+wr_ptr_gray_sync2 <= 0;
+end
+else begin
+wr_ptr_gray_sync1 <= wr_ptr_gray;
+wr_ptr_gray_sync2 <= wr_ptr_gray_sync1;
+end 
+end
+
+always@(posedge clk_w or posedge rst)
+begin
+if(rst) begin
+rd_ptr_gray_sync1 <= 0;
+rd_ptr_gray_sync2 <= 0;
+end
+else begin
+rd_ptr_gray_sync1 <= rd_ptr_gray;
+rd_ptr_gray_sync2 <= rd_ptr_gray_sync1;
+end
+end
+
+//BINARY TO GRAY CONVERSION
+
+wire [6:0]wr_ptr_gray_next = (wr_ptr_bin>>1) ^ wr_ptr_bin;
+wire [6:0]rd_ptr_gray_next = (rd_ptr_bin>>1) ^ rd_ptr_bin;
+
+//GRAY TO BINARY CONVERSION
+
+function [6:0]gray2bin;
+input [6:0]g;
+integer i;
+begin
+gray2bin[6] = g[6];
+for(i=5; i>=0; i=i-1)
+gray2bin[i] = gray2bin[i+1] ^ g[i];
+end 
+endfunction
+
+wire [6:0]wr_ptr_bin_sync = gray2bin(wr_ptr_gray_sync2);
+wire [6:0]rd_ptr_bin_sync = gray2bin(rd_ptr_gray_sync2);
+
+assign buf_empty = (wr_ptr_gray_sync2 == rd_ptr_gray);
+assign buf_full = (wr_ptr_gray_next[6] != rd_ptr_gray_sync2[6]) && (wr_ptr_gray_next[5:0] == rd_ptr_gray_sync2[5:0]);
+
+always@(posedge clk_w or posedge rst)
+begin
+if(rst)
+fifo_counter <= 0;
+else if(wr_en && !buf_full && !(rd_en && !buf_empty))
+fifo_counter <= fifo_counter + 1;
+else if(!(wr_en && !buf_full) && rd_en && !buf_empty)
+fifo_counter <= fifo_counter - 1;
+end
+
+always@(posedge clk_w or posedge rst)
+begin
+if(rst) begin
+wr_ptr_bin <= 0;
+wr_ptr_gray <= 0;
+end
+else if(wr_en && !buf_full)
+begin
+buf_mem[wr_ptr_bin] <= buf_in;
+wr_ptr_bin <= wr_ptr_bin + 1;
+wr_ptr_gray <= wr_ptr_gray_next;
+end 
+end 
+
+always@(posedge clk_r or posedge rst)
+begin 
+if(rst)
+begin
+rd_ptr_bin <= 0;
+rd_ptr_gray <= 0;
+buf_out <= 0;
+end
+else if (rd_en && !buf_empty)
+begin
+buf_out <= buf_mem[rd_ptr_bin];
+rd_ptr_bin <= rd_ptr_bin + 1;
+rd_ptr_gray <= rd_ptr_gray_next;
+end
+end 
+
+endmodule
